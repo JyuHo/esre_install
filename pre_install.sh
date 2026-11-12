@@ -33,6 +33,11 @@ fi
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
+# Installer dialog si absent pour garantir l'interface interactive
+if ! command -v dialog >/dev/null 2>&1; then
+    pacman -Sy --noconfirm dialog 2>/dev/null || true
+fi
+
 USE_DIALOG=0
 if command -v dialog >/dev/null 2>&1 && [[ -t 0 ]] && [[ "${NONINTERACTIVE:-0}" != "1" ]]; then
     USE_DIALOG=1
