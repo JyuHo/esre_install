@@ -125,12 +125,40 @@ if [[ $USE_DIALOG -eq 1 ]]; then
     dialog --msgbox "EmulationStation-RE — Installation Arch Linux\n\nCPU : ${CPU_VENDOR}\nGPU : ${GPU_TYPES}\nBC-250 : ${BC250}\n\nMenu principal : naviguez entre les sections, puis 'Lancer l'installation'." 12 70
 fi
 
+# ---------- Fonction : liste des paquets ----------
+build_pkg_list() {
+    local pkgs=(base base-devel btrfs-progs sudo polkit)
+    [[ $SNAPPER_OPT -eq 1 ]] && pkgs+=(snapper snap-pac)
+    [[ $NETWORK_OPT -eq 1 ]] && pkgs+=(networkmanager)
+    if [[ $PIPEWIRE_OPT -eq 1 ]]; then pkgs+=(pipewire wireplumber pipewire-alsa pipewire-pulse alsa-utils); fi
+    if [[ $XORG_OPT -eq 1 ]]; then pkgs+=(xorg-server xorg-xinit); fi
+    pkgs+=(git curl wget unzip limine efibootmgr)
+    [[ $REFLECTOR_OPT -eq 1 ]] && pkgs+=(reflector)
+    [[ $FONTS_OPT -eq 1 ]] && pkgs+=(noto-fonts-cjk)
+    case "$CPU_VENDOR" in amd) pkgs+=(amd-ucode) ;; intel) pkgs+=(intel-ucode) ;; esac
+    pkgs+=(linux-firmware)
+    if [[ "$BC250" -eq 0 ]]; then
+        pkgs+=(linux linux-headers)
+    else
+        pkgs+=(linux-cachyos-bore-bc250 linux-cachyos-bore-bc250-headers mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon)
+    fi
+    for g in $GPU_TYPES; do
+        case "$g" in
+            amd) pkgs+=(mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon) ;;
+            intel) pkgs+=(mesa lib32-mesa vulkan-intel lib32-vulkan-intel intel-media-driver) ;;
+            nvidia) pkgs+=(nvidia nvidia-utils lib32-nvidia-utils) ;;
+        esac
+    done
+    printf '%s\n' "${pkgs[@]}" | sort -u | tr '\n' ' '
+}
+
 # ---------- Menu principal ----------
 if [[ $USE_DIALOG -eq 1 ]]; then
     while true; do
         CHOICE="$(dialog --stdout --menu "Menu principal" 22 74 12 \
             DISK "Disque cible : ${DISK:-<non défini>}" \
             PARTITION "Partitionnement : auto (ESP ${ESP_SIZE}M, ${ROOT_FS})" \
+            PACKAGES "Paquets à installer (voir liste)" \
             OPTIONS "Options d'installation" \
             USER "Utilisateur / mots de passe" \
             SYSTEM "Hostname / timezone / locale / keymap" \
@@ -169,6 +197,31 @@ if [[ $USE_DIALOG -eq 1 ]]; then
                             if [[ "$ROOT_FS" != "btrfs" ]]; then
                                 SNAPPER_OPT=0
                             fi
+                            ;;
+                        BACK|"")
+                            break
+                            ;;
+                    esac
+                done
+                ;;
+            PACKAGES)
+                while true; do
+                    pklist="$(build_pkg_list)"
+                    pkchoice="$(dialog --stdout --menu "Paquets à installer" 20 74 8 \
+                        LIST "Voir la liste complète" \
+                        MINIMAL "Installation minimale (base uniquement)" \
+                        FULL "Installation complète (réactiver tout)" \
+                        BACK "Retour" \
+                        2>/dev/null)" || true
+                    case "$pkchoice" in
+                        LIST)
+                            msg "Paquets à installer :\n\n$pklist"
+                            ;;
+                        MINIMAL)
+                            SNAPPER_OPT=0; AUTOLOGIN_OPT=0; PIPEWIRE_OPT=0; XORG_OPT=0; NETWORK_OPT=0; REFLECTOR_OPT=0; FONTS_OPT=0
+                            ;;
+                        FULL)
+                            SNAPPER_OPT=1; AUTOLOGIN_OPT=1; PIPEWIRE_OPT=1; XORG_OPT=1; NETWORK_OPT=1
                             ;;
                         BACK|"")
                             break
