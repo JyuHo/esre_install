@@ -207,7 +207,7 @@ if [[ "$OS" == "arch" ]]; then
     if [[ "$ARCH_NORM" == "x86_64" ]]; then
         pacman -S --needed --noconfirm steam 2>/dev/null || true
     fi
-    pacman -S --needed --noconfirm v4l-utils 2>/dev/null || true
+    pacman -S --needed --noconfirm v4l-utils dolphin firefox 2>/dev/null || true
 
     if [[ "$BC250" -eq 1 ]]; then
         pacman -S --needed --noconfirm proton-cachyos-slr-bc250 bc250-dual-audio bc250-cec bc250-fixes 2>/dev/null || true
@@ -225,7 +225,7 @@ elif [[ "$OS" == "debian" ]]; then
     if [[ "$ARCH_NORM" == "x86_64" ]]; then
         apt-get install -y steam 2>/dev/null || true
     fi
-    apt-get install -y v4l-utils 2>/dev/null || true
+    apt-get install -y v4l-utils dolphin firefox 2>/dev/null || true
 fi
 
 # ---------- Service systemd (optionnel, désactivé par défaut) ----------
