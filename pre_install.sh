@@ -1,20 +1,14 @@
 #!/usr/bin/env bash
 # pre_install.sh — Prépare l'installation d'Arch Linux pour EmulationStation-RE.
 #
-# Interface interactive (dialog) à l'image d'Archinstall :
-#   - sélection du disque, saisie hostname/timezone/locale/utilisateur/mots de passe
-#   - cases à cocher pour les options (swap, snapper, pipewire, Xorg, autologin, ...)
+# Interface interactive à l'image d'Archinstall :
+#   - menu principal listant les sous-menus (disque, options, utilisateur, système, swap)
 #   - partitionnement GPT, formatage btrfs + subvolumes, pacstrap minimal
 #   - uniquement les pilotes/firmware nécessaires (détection matérielle)
 #   - si AMD BC-250 détectée : dépôt bc250-cachyos + kernel linux-cachyos-bore-bc250
 #   - bootloader Limine
-#
-# Variables d'environnement optionnelles (sautent les invites) :
-#   DISK, SWAP_SIZE, HOSTNAME, TIMEZONE, LANG, USERNAME, USER_PASSWORD,
-#   ROOT_PASSWORD, BC250_FORCE, NONINTERACTIVE=1
 set -euo pipefail
 
-# ---------- Couleurs / log ----------
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[+]${NC} $*"; }
 info() { echo -e "${BLUE}[i]${NC} $*"; }
@@ -26,13 +20,11 @@ die()  { echo -e "${RED}[x]${NC} $*" >&2; exit 1; }
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
-# ---------- Outils dialog ----------
 USE_DIALOG=0
 if command -v dialog >/dev/null 2>&1 && [[ -t 0 ]] && [[ "${NONINTERACTIVE:-0}" != "1" ]]; then
     USE_DIALOG=1
 fi
 
-# fallback readline si pas de dialog
 prompt() {
     local label="$1" default="${2:-}"
     local val
@@ -60,18 +52,9 @@ prompt_password() {
 
 msg() {
     if [[ $USE_DIALOG -eq 1 ]]; then
-        dialog --msgbox "$1" 12 70
+        dialog --msgbox "$1" 14 72
     else
         echo "$1"
-    fi
-}
-
-confirm() {
-    if [[ $USE_DIALOG -eq 1 ]]; then
-        dialog --yesno "$1" 8 60
-    else
-        read -rp "$1 (oui/non) : " c
-        [[ "$c" == "oui" ]]
     fi
 }
 
@@ -81,7 +64,6 @@ detect_cpu_vendor() {
     elif grep -qi 'AuthenticAMD' /proc/cpuinfo; then echo amd
     else echo unknown; fi
 }
-
 detect_gpu() {
     local out=""
     if lspci 2>/dev/null | grep -qi 'VGA\|3D\|Display'; then
@@ -91,7 +73,6 @@ detect_gpu() {
     fi
     echo "${out:-unknown}"
 }
-
 is_bc250() {
     if [[ "${BC250_FORCE:-0}" == "1" ]]; then return 0; fi
     if lspci -nn 2>/dev/null | grep -qi 'BC-250\|BC250\|\[1002:13fe\]\|\[1002:143f\]'; then return 0; fi
@@ -103,81 +84,116 @@ CPU_VENDOR="$(detect_cpu_vendor)"
 GPU_TYPES="$(detect_gpu)"
 if is_bc250; then BC250=1; else BC250=0; fi
 
-# ---------- Écran d'accueil ----------
-if [[ $USE_DIALOG -eq 1 ]]; then
-    dialog --msgbox "EmulationStation-RE — Installation Arch Linux\n\nCPU : ${CPU_VENDOR}\nGPU : ${GPU_TYPES}\nBC-250 : ${BC250}\n\nAppuyez sur OK pour continuer." 12 60
-fi
-
-# ---------- Sélection du disque ----------
-if [[ -z "${DISK:-}" ]]; then
-    # construire la liste des disques
-    if [[ $USE_DIALOG -eq 1 ]]; then
-        disk_opts=()
-        while read -r name size model; do
-            disk_opts+=("/dev/$name" "$size $model")
-        done < <(lsblk -d -n -o NAME,SIZE,MODEL | grep -v '^loop')
-        dialog --menu "Choisir le disque cible" 18 70 10 "${disk_opts[@]}" 2>"$TMPDIR/disk" || true
-        DISK="$(cat "$TMPDIR/disk" 2>/dev/null || true)"
-    else
-        echo "Disques disponibles :"; lsblk -d -o NAME,SIZE,MODEL
-        DISK="$(prompt "Disque cible (ex: /dev/sda)" "")"
-    fi
-fi
-[[ -b "$DISK" ]] || die "Disque invalide : $DISK"
-
-# ---------- Options (cases à cocher) ----------
-# valeurs par défaut
-# swap par défaut : 16 Go pour BC-250, 4 Go sinon
-if [[ -z "${SWAP_SIZE:-}" ]]; then
-    if [[ "${BC250:-0}" == "1" ]]; then SWAP_SIZE=16; else SWAP_SIZE=4; fi
+# ---------- Valeurs par défaut ----------
+SWAP_SIZE="${SWAP_SIZE:-}"
+if [[ -z "$SWAP_SIZE" ]]; then
+    if [[ "$BC250" == "1" ]]; then SWAP_SIZE=16; else SWAP_SIZE=4; fi
 fi
 HOSTNAME="${HOSTNAME:-esre}"
 TIMEZONE="${TIMEZONE:-Europe/Paris}"
 LANG="${LANG:-fr_FR.UTF-8}"
 KEYMAP="${KEYMAP:-fr}"
 USERNAME="${USERNAME:-gamer}"
-SNAPPER_OPT=1; AUTOLOGIN_OPT=1; PIPEWIRE_OPT=1; XORG_OPT=1; NETWORK_OPT=1; REFLECTOR_OPT=0; FONTS_OPT=0
+SNAPPER_OPT="${SNAPPER_OPT:-1}"
+AUTOLOGIN_OPT="${AUTOLOGIN_OPT:-1}"
+PIPEWIRE_OPT="${PIPEWIRE_OPT:-1}"
+XORG_OPT="${XORG_OPT:-1}"
+NETWORK_OPT="${NETWORK_OPT:-1}"
+REFLECTOR_OPT="${REFLECTOR_OPT:-0}"
+FONTS_OPT="${FONTS_OPT:-0}"
+DISK="${DISK:-}"
 
 if [[ $USE_DIALOG -eq 1 ]]; then
-    dialog --checklist "Options à installer" 18 70 8 \
-        SWAP "Partition swap (${SWAP_SIZE} Go)" on \
-        SNAPPER "Snapper + snapshots (btrfs)" on \
-        AUTOLOGIN "Autologin tty1 + startx" on \
-        PIPEWIRE "Pipewire (audio)" on \
-        XORG "Serveur Xorg" on \
-        NETWORK "NetworkManager" on \
-        REFLECTOR "Reflector (miroirs)" off \
-        FONTS "Noto fonts CJK" off \
-        2>"$TMPDIR/opts" || true
-    OPTS="$(cat "$TMPDIR/opts" 2>/dev/null || true)"
-    # swap toggle
-    echo "$OPTS" | grep -q SWAP || SWAP_SIZE=0
-    echo "$OPTS" | grep -q SNAPPER || SNAPPER_OPT=0
-    echo "$OPTS" | grep -q AUTOLOGIN || AUTOLOGIN_OPT=0
-    echo "$OPTS" | grep -q PIPEWIRE || PIPEWIRE_OPT=0
-    echo "$OPTS" | grep -q XORG || XORG_OPT=0
-    echo "$OPTS" | grep -q NETWORK || NETWORK_OPT=0
-    echo "$OPTS" | grep -q REFLECTOR || REFLECTOR_OPT=0
-    echo "$OPTS" | grep -q FONTS || FONTS_OPT=0
+    dialog --msgbox "EmulationStation-RE — Installation Arch Linux\n\nCPU : ${CPU_VENDOR}\nGPU : ${GPU_TYPES}\nBC-250 : ${BC250}\n\nMenu principal : naviguez entre les sections, puis 'Lancer l'installation'." 12 70
+fi
+
+# ---------- Menu principal ----------
+if [[ $USE_DIALOG -eq 1 ]]; then
+    while true; do
+        dialog --menu "Menu principal" 22 74 12 \
+            DISK "Disque cible : ${DISK:-<non défini>}" \
+            OPTIONS "Options d'installation" \
+            USER "Utilisateur / mots de passe" \
+            SYSTEM "Hostname / timezone / locale / keymap" \
+            SWAP "Swap : ${SWAP_SIZE} Go" \
+            STATUS "Récapitulatif" \
+            INSTALL "Lancer l'installation" \
+            QUIT "Quitter" \
+            2>"$TMPDIR/menu" || true
+        CHOICE="$(cat "$TMPDIR/menu" 2>/dev/null || true)"
+        case "$CHOICE" in
+            DISK)
+                disk_opts=()
+                while read -r name size model; do
+                    disk_opts+=("/dev/$name" "$size $model")
+                done < <(lsblk -d -n -o NAME,SIZE,MODEL | grep -v '^loop')
+                dialog --menu "Choisir le disque cible" 18 70 10 "${disk_opts[@]}" 2>"$TMPDIR/disk" || true
+                d="$(cat "$TMPDIR/disk" 2>/dev/null || true)"
+                [[ -n "$d" ]] && DISK="$d"
+                ;;
+            OPTIONS)
+                dialog --checklist "Options à installer" 18 70 8 \
+                    SNAPPER "Snapper + snapshots (btrfs)" "$([[ $SNAPPER_OPT -eq 1 ]] && echo on || echo off)" \
+                    AUTOLOGIN "Autologin tty1 + startx" "$([[ $AUTOLOGIN_OPT -eq 1 ]] && echo on || echo off)" \
+                    PIPEWIRE "Pipewire (audio)" "$([[ $PIPEWIRE_OPT -eq 1 ]] && echo on || echo off)" \
+                    XORG "Serveur Xorg" "$([[ $XORG_OPT -eq 1 ]] && echo on || echo off)" \
+                    NETWORK "NetworkManager" "$([[ $NETWORK_OPT -eq 1 ]] && echo on || echo off)" \
+                    REFLECTOR "Reflector (miroirs)" "$([[ $REFLECTOR_OPT -eq 1 ]] && echo on || echo off)" \
+                    FONTS "Noto fonts CJK" "$([[ $FONTS_OPT -eq 1 ]] && echo on || echo off)" \
+                    2>"$TMPDIR/opts" || true
+                OPTS="$(cat "$TMPDIR/opts" 2>/dev/null || true)"
+                echo "$OPTS" | grep -q SNAPPER && SNAPPER_OPT=1 || SNAPPER_OPT=0
+                echo "$OPTS" | grep -q AUTOLOGIN && AUTOLOGIN_OPT=1 || AUTOLOGIN_OPT=0
+                echo "$OPTS" | grep -q PIPEWIRE && PIPEWIRE_OPT=1 || PIPEWIRE_OPT=0
+                echo "$OPTS" | grep -q XORG && XORG_OPT=1 || XORG_OPT=0
+                echo "$OPTS" | grep -q NETWORK && NETWORK_OPT=1 || NETWORK_OPT=0
+                echo "$OPTS" | grep -q REFLECTOR && REFLECTOR_OPT=1 || REFLECTOR_OPT=0
+                echo "$OPTS" | grep -q FONTS && FONTS_OPT=1 || FONTS_OPT=0
+                ;;
+            USER)
+                USERNAME="$(prompt "Nom d'utilisateur" "$USERNAME")"
+                if [[ -z "${USER_PASSWORD:-}" ]]; then
+                    USER_PASSWORD="$(prompt_password "Mot de passe utilisateur ($USERNAME)")"
+                else
+                    np="$(prompt_password "Mot de passe utilisateur ($USERNAME) [vide = garder]")"
+                    [[ -n "$np" ]] && USER_PASSWORD="$np"
+                fi
+                if [[ -z "${ROOT_PASSWORD:-}" ]]; then
+                    ROOT_PASSWORD="$(prompt_password "Mot de passe root")"
+                else
+                    np="$(prompt_password "Mot de passe root [vide = garder]")"
+                    [[ -n "$np" ]] && ROOT_PASSWORD="$np"
+                fi
+                ;;
+            SYSTEM)
+                HOSTNAME="$(prompt "Hostname" "$HOSTNAME")"
+                TIMEZONE="$(prompt "Timezone (ex: Europe/Paris)" "$TIMEZONE")"
+                LANG="$(prompt "Locale (ex: fr_FR.UTF-8)" "$LANG")"
+                KEYMAP="$(prompt "Keymap console (ex: fr, us)" "$KEYMAP")"
+                ;;
+            SWAP)
+                v="$(prompt "Taille du swap en Go (0 = désactivé)" "$SWAP_SIZE")"
+                SWAP_SIZE="${v:-$SWAP_SIZE}"
+                ;;
+            STATUS)
+                msg "Récapitulatif :\n\nDisque : ${DISK:-<non défini>}\nSwap : ${SWAP_SIZE} Go\nHostname : $HOSTNAME\nTimezone : $TIMEZONE\nLocale : $LANG\nKeymap : $KEYMAP\nUtilisateur : $USERNAME\nBC-250 : $BC250\nSnapper : $SNAPPER_OPT\nAutologin : $AUTOLOGIN_OPT\nPipewire : $PIPEWIRE_OPT\nXorg : $XORG_OPT\nNetwork : $NETWORK_OPT\nReflector : $REFLECTOR_OPT\nFonts CJK : $FONTS_OPT"
+                ;;
+            INSTALL)
+                break
+                ;;
+            QUIT|"")
+                die "Annulé par l'utilisateur."
+                ;;
+        esac
+    done
 else
-    # mode texte : questions simples
-    read -rp "Activer snapper ? (o/n) [o] : " v; [[ "${v:-o}" == "o" ]] || SNAPPER_OPT=0
-    read -rp "Autologin ? (o/n) [o] : " v; [[ "${v:-o}" == "o" ]] || AUTOLOGIN_OPT=0
+    echo "Disques disponibles :"; lsblk -d -o NAME,SIZE,MODEL
+    [[ -z "$DISK" ]] && DISK="$(prompt "Disque cible (ex: /dev/sda)" "")"
+    [[ -z "${USER_PASSWORD:-}" ]] && USER_PASSWORD="$(prompt_password "Mot de passe utilisateur ($USERNAME)")"
+    [[ -z "${ROOT_PASSWORD:-}" ]] && ROOT_PASSWORD="$(prompt_password "Mot de passe root")"
 fi
 
-# ---------- Saisie des données ----------
-HOSTNAME="$(prompt "Hostname" "$HOSTNAME")"
-TIMEZONE="$(prompt "Timezone (ex: Europe/Paris)" "$TIMEZONE")"
-LANG="$(prompt "Locale (ex: fr_FR.UTF-8)" "$LANG")"
-KEYMAP="$(prompt "Keymap console (ex: fr, us)" "$KEYMAP")"
-USERNAME="$(prompt "Nom d'utilisateur" "$USERNAME")"
-if [[ -z "${USER_PASSWORD:-}" ]]; then USER_PASSWORD="$(prompt_password "Mot de passe utilisateur ($USERNAME)")"; fi
-if [[ -z "${ROOT_PASSWORD:-}" ]]; then ROOT_PASSWORD="$(prompt_password "Mot de passe root")"; fi
-
-if [[ $SWAP_SIZE -gt 0 ]]; then
-    v="$(prompt "Taille du swap en Go (0 = désactivé)" "$SWAP_SIZE")"
-    SWAP_SIZE="${v:-$SWAP_SIZE}"
-fi
+[[ -b "$DISK" ]] || die "Disque invalide : $DISK"
 
 # ---------- Confirmation ----------
 SUMMARY="Disque : $DISK
@@ -185,11 +201,16 @@ Swap : ${SWAP_SIZE} Go
 Hostname : $HOSTNAME
 Timezone : $TIMEZONE
 Locale : $LANG
+Keymap : $KEYMAP
 Utilisateur : $USERNAME
 BC-250 : $BC250
-Options : snapper=$SNAPPER_OPT autologin=$AUTOLOGIN_OPT pipewire=$PIPEWIRE_OPT xorg=$XORG_OPT network=$NETWORK_OPT"
-if ! confirm "Confirmer l'installation ?\n\n$SUMMARY"; then
-    die "Annulé par l'utilisateur."
+Options : snapper=$SNAPPER_OPT autologin=$AUTOLOGIN_OPT pipewire=$PIPEWIRE_OPT xorg=$XORG_OPT network=$NETWORK_OPT reflector=$REFLECTOR_OPT fonts=$FONTS_OPT"
+if [[ $USE_DIALOG -eq 1 ]]; then
+    dialog --yesno "Confirmer l'installation ?\n\n$SUMMARY" 18 60 || die "Annulé par l'utilisateur."
+else
+    echo "$SUMMARY"
+    read -rp "Confirmer ? (oui/non) : " c
+    [[ "$c" == "oui" ]] || die "Annulé."
 fi
 
 # ---------- Partitionnement ----------
@@ -251,7 +272,6 @@ if [[ $XORG_OPT -eq 1 ]]; then
     PAC_PKGS+=(xorg-server xorg-xinit)
 fi
 PAC_PKGS+=(git curl wget unzip limine efibootmgr)
-
 [[ $REFLECTOR_OPT -eq 1 ]] && PAC_PKGS+=(reflector)
 [[ $FONTS_OPT -eq 1 ]] && PAC_PKGS+=(noto-fonts-cjk)
 
@@ -259,7 +279,6 @@ case "$CPU_VENDOR" in
     amd) PAC_PKGS+=(amd-ucode) ;;
     intel) PAC_PKGS+=(intel-ucode) ;;
 esac
-
 PAC_PKGS+=(linux-firmware)
 
 if [[ "$BC250" -eq 0 ]]; then
@@ -347,7 +366,6 @@ if ! grep -q '^%wheel' /etc/sudoers; then
     echo '%wheel ALL=(ALL:ALL) ALL' >> /etc/sudoers
 fi
 
-# snapper
 if [[ "${SNAPPER_OPT}" == "1" ]]; then
     if ! snapper list-configs 2>/dev/null | grep -q '^root'; then
         snapper -c root create-config /
@@ -383,11 +401,10 @@ if [[ -f /boot/intel-ucode.img ]]; then UCODE_INITRD="/intel-ucode.img"; fi
     fi
     echo "    initrd_path: boot():${INITRD}"
     if [[ "${BC250}" == "1" ]]; then
-        CMDLINE="root=UUID=${ROOT_UUID} rw rootflags=subvol=@ compress=zstd zswap.enabled=1 zswap.compressor=zstd zswap.zpool=zsmalloc"
+        echo "    cmdline: root=UUID=${ROOT_UUID} rw rootflags=subvol=@ compress=zstd zswap.enabled=1 zswap.compressor=zstd zswap.zpool=zsmalloc"
     else
-        CMDLINE="root=UUID=${ROOT_UUID} rw rootflags=subvol=@ compress=zstd"
+        echo "    cmdline: root=UUID=${ROOT_UUID} rw rootflags=subvol=@ compress=zstd"
     fi
-    echo "    cmdline: ${CMDLINE}"
 } > /boot/limine.conf
 
 mkinitcpio -P
@@ -411,7 +428,6 @@ else
     fi
 fi
 
-# autologin
 if [[ "${AUTOLOGIN_OPT}" == "1" ]]; then
     mkdir -p /etc/systemd/system/getty@tty1.service.d
     cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf <<EOF
