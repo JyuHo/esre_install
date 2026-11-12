@@ -118,6 +118,8 @@ NETWORK_OPT="${NETWORK_OPT:-1}"
 REFLECTOR_OPT="${REFLECTOR_OPT:-0}"
 FONTS_OPT="${FONTS_OPT:-0}"
 DISK="${DISK:-}"
+ESP_SIZE="${ESP_SIZE:-512}"
+ROOT_FS="${ROOT_FS:-btrfs}"
 
 if [[ $USE_DIALOG -eq 1 ]]; then
     dialog --msgbox "EmulationStation-RE — Installation Arch Linux\n\nCPU : ${CPU_VENDOR}\nGPU : ${GPU_TYPES}\nBC-250 : ${BC250}\n\nMenu principal : naviguez entre les sections, puis 'Lancer l'installation'." 12 70
@@ -128,6 +130,7 @@ if [[ $USE_DIALOG -eq 1 ]]; then
     while true; do
         CHOICE="$(dialog --stdout --menu "Menu principal" 22 74 12 \
             DISK "Disque cible : ${DISK:-<non défini>}" \
+            PARTITION "Partitionnement : auto (ESP ${ESP_SIZE}M, ${ROOT_FS})" \
             OPTIONS "Options d'installation" \
             USER "Utilisateur / mots de passe" \
             SYSTEM "Hostname / timezone / locale / keymap" \
@@ -144,6 +147,34 @@ if [[ $USE_DIALOG -eq 1 ]]; then
                 done < <(lsblk -d -n -o NAME,SIZE,MODEL | grep -v '^loop')
                 d="$(dialog --stdout --menu "Choisir le disque cible" 18 70 10 "${disk_opts[@]}" 2>/dev/null)" || true
                 [[ -n "$d" ]] && DISK="$d"
+                ;;
+            PARTITION)
+                while true; do
+                    pchoice="$(dialog --stdout --menu "Partitionnement" 18 70 8 \
+                        ESP "Taille ESP (Mo) : ${ESP_SIZE}" \
+                        FS "Système de fichiers root : ${ROOT_FS}" \
+                        BACK "Retour" \
+                        2>/dev/null)" || true
+                    case "$pchoice" in
+                        ESP)
+                            v="$(prompt "Taille de l'ESP en Mo" "$ESP_SIZE")"
+                            [[ -n "$v" ]] && ESP_SIZE="$v"
+                            ;;
+                        FS)
+                            f="$(dialog --stdout --menu "Système de fichiers root" 12 50 4 \
+                                btrfs "btrfs (snapshots/snapper)" \
+                                ext4 "ext4 (simple)" \
+                                2>/dev/null)" || true
+                            [[ -n "$f" ]] && ROOT_FS="$f"
+                            if [[ "$ROOT_FS" != "btrfs" ]]; then
+                                SNAPPER_OPT=0
+                            fi
+                            ;;
+                        BACK|"")
+                            break
+                            ;;
+                    esac
+                done
                 ;;
             OPTIONS)
                 OPTS="$(dialog --stdout --checklist "Options à installer" 18 70 8 \
@@ -189,7 +220,7 @@ if [[ $USE_DIALOG -eq 1 ]]; then
                 SWAP_SIZE="${v:-$SWAP_SIZE}"
                 ;;
             STATUS)
-                msg "Récapitulatif :\n\nDisque : ${DISK:-<non défini>}\nSwap : ${SWAP_SIZE} Go\nHostname : $HOSTNAME\nTimezone : $TIMEZONE\nLocale : $LANG\nKeymap : $KEYMAP\nUtilisateur : $USERNAME\nBC-250 : $BC250\nSnapper : $SNAPPER_OPT\nAutologin : $AUTOLOGIN_OPT\nPipewire : $PIPEWIRE_OPT\nXorg : $XORG_OPT\nNetwork : $NETWORK_OPT\nReflector : $REFLECTOR_OPT\nFonts CJK : $FONTS_OPT"
+                msg "Récapitulatif :\n\nDisque : ${DISK:-<non défini>}\nPartitionnement : auto (ESP ${ESP_SIZE}M, ${ROOT_FS})\nSwap : ${SWAP_SIZE} Go\nHostname : $HOSTNAME\nTimezone : $TIMEZONE\nLocale : $LANG\nKeymap : $KEYMAP\nUtilisateur : $USERNAME\nBC-250 : $BC250\nSnapper : $SNAPPER_OPT\nAutologin : $AUTOLOGIN_OPT\nPipewire : $PIPEWIRE_OPT\nXorg : $XORG_OPT\nNetwork : $NETWORK_OPT\nReflector : $REFLECTOR_OPT\nFonts CJK : $FONTS_OPT"
                 ;;
             INSTALL)
                 break
@@ -230,7 +261,7 @@ fi
 log "Partitionnement GPT de $DISK"
 sgdisk --zap-all "$DISK"
 
-sgdisk -n 1:0:+512M -t 1:ef00 -c 1:EFI "$DISK"
+sgdisk -n 1:0:+${ESP_SIZE}M -t 1:ef00 -c 1:EFI "$DISK"
 
 PART_NO=2
 if [[ "$SWAP_SIZE" -gt 0 ]]; then
@@ -253,25 +284,32 @@ if [[ "$SWAP_SIZE" -gt 0 ]]; then
     swapon "$SWAP_PART"
 fi
 
-log "Formatage btrfs (root)"
-mkfs.btrfs -L root -f "$ROOT_PART"
+if [[ "$ROOT_FS" == "btrfs" ]]; then
+    log "Formatage btrfs (root)"
+    mkfs.btrfs -L root -f "$ROOT_PART"
 
-# ---------- Subvolumes ----------
-log "Création des subvolumes btrfs"
-mount "$ROOT_PART" /mnt
-btrfs subvolume create /mnt/@
-btrfs subvolume create /mnt/@home
-btrfs subvolume create /mnt/@snapshots
-btrfs subvolume create /mnt/@var_log
-umount /mnt
+    log "Création des subvolumes btrfs"
+    mount "$ROOT_PART" /mnt
+    btrfs subvolume create /mnt/@
+    btrfs subvolume create /mnt/@home
+    btrfs subvolume create /mnt/@snapshots
+    btrfs subvolume create /mnt/@var_log
+    umount /mnt
 
-BTRFS_OPTS="rw,noatime,compress=zstd:3,space_cache=v2"
-mount -o "${BTRFS_OPTS},subvol=@" "$ROOT_PART" /mnt
-mkdir -p /mnt/{home,.snapshots,var/log,boot}
-mount -o "${BTRFS_OPTS},subvol=@home" "$ROOT_PART" /mnt/home
-mount -o "${BTRFS_OPTS},subvol=@snapshots" "$ROOT_PART" /mnt/.snapshots
-mount -o "${BTRFS_OPTS},subvol=@var_log" "$ROOT_PART" /mnt/var/log
-mount "$EFI_PART" /mnt/boot
+    BTRFS_OPTS="rw,noatime,compress=zstd:3,space_cache=v2"
+    mount -o "${BTRFS_OPTS},subvol=@" "$ROOT_PART" /mnt
+    mkdir -p /mnt/{home,.snapshots,var/log,boot}
+    mount -o "${BTRFS_OPTS},subvol=@home" "$ROOT_PART" /mnt/home
+    mount -o "${BTRFS_OPTS},subvol=@snapshots" "$ROOT_PART" /mnt/.snapshots
+    mount -o "${BTRFS_OPTS},subvol=@var_log" "$ROOT_PART" /mnt/var/log
+    mount "$EFI_PART" /mnt/boot
+else
+    log "Formatage $ROOT_FS (root)"
+    "mkfs.$ROOT_FS" -L root -F "$ROOT_PART"
+    mount "$ROOT_PART" /mnt
+    mkdir -p /mnt/boot
+    mount "$EFI_PART" /mnt/boot
+fi
 
 # ---------- Pacstrap ----------
 log "Installation du système de base (pacstrap)"
@@ -326,6 +364,7 @@ export GPU_TYPES=$(printf '%q' "$GPU_TYPES")
 export BC250=$BC250
 export EFI_PART=$(printf '%q' "$EFI_PART")
 export ROOT_PART=$(printf '%q' "$ROOT_PART")
+export ROOT_FS=$(printf '%q' "$ROOT_FS")
 export DISK=$(printf '%q' "$DISK")
 export SNAPPER_OPT=$SNAPPER_OPT
 export AUTOLOGIN_OPT=$AUTOLOGIN_OPT
@@ -379,7 +418,7 @@ if ! grep -q '^%wheel' /etc/sudoers; then
     echo '%wheel ALL=(ALL:ALL) ALL' >> /etc/sudoers
 fi
 
-if [[ "${SNAPPER_OPT}" == "1" ]]; then
+if [[ "${ROOT_FS}" == "btrfs" && "${SNAPPER_OPT}" == "1" ]]; then
     if ! snapper list-configs 2>/dev/null | grep -q '^root'; then
         snapper -c root create-config /
     fi
@@ -413,11 +452,14 @@ if [[ -f /boot/intel-ucode.img ]]; then UCODE_INITRD="/intel-ucode.img"; fi
         echo "    initrd_path: boot():${UCODE_INITRD}"
     fi
     echo "    initrd_path: boot():${INITRD}"
-    if [[ "${BC250}" == "1" ]]; then
-        echo "    cmdline: root=UUID=${ROOT_UUID} rw rootflags=subvol=@ compress=zstd zswap.enabled=1 zswap.compressor=zstd zswap.zpool=zsmalloc"
-    else
-        echo "    cmdline: root=UUID=${ROOT_UUID} rw rootflags=subvol=@ compress=zstd"
+    CMDLINE="root=UUID=${ROOT_UUID} rw"
+    if [[ "${ROOT_FS}" == "btrfs" ]]; then
+        CMDLINE+=" rootflags=subvol=@ compress=zstd"
     fi
+    if [[ "${BC250}" == "1" ]]; then
+        CMDLINE+=" zswap.enabled=1 zswap.compressor=zstd zswap.zpool=zsmalloc"
+    fi
+    echo "    cmdline: ${CMDLINE}"
 } > /boot/limine.conf
 
 mkinitcpio -P
@@ -460,7 +502,7 @@ EOF
     chown -R "${USERNAME}:${USERNAME}" "${USER_HOME}"
 fi
 
-if [[ "${SNAPPER_OPT}" == "1" ]]; then
+if [[ "${ROOT_FS}" == "btrfs" && "${SNAPPER_OPT}" == "1" ]]; then
     snapper -c root create --description "Installation initiale" --cleanup-algorithm number || true
 fi
 
