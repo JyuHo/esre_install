@@ -128,7 +128,7 @@ fi
 
 # ---------- Fonction : liste des paquets ----------
 build_pkg_list() {
-    local pkgs=(base base-devel btrfs-progs sudo polkit)
+    local pkgs=(base base-devel btrfs-progs sudo polkit xterm)
     [[ $SNAPPER_OPT -eq 1 ]] && pkgs+=(snapper snap-pac)
     [[ $NETWORK_OPT -eq 1 ]] && pkgs+=(networkmanager)
     if [[ $PIPEWIRE_OPT -eq 1 ]]; then pkgs+=(pipewire wireplumber pipewire-alsa pipewire-pulse alsa-utils); fi
@@ -370,7 +370,7 @@ fi
 
 # ---------- Pacstrap ----------
 log "Installation du système de base (pacstrap)"
-PAC_PKGS=(base base-devel btrfs-progs sudo polkit)
+PAC_PKGS=(base base-devel btrfs-progs sudo polkit xterm)
 [[ $SNAPPER_OPT -eq 1 ]] && PAC_PKGS+=(snapper snap-pac)
 [[ $NETWORK_OPT -eq 1 ]] && PAC_PKGS+=(networkmanager)
 if [[ $PIPEWIRE_OPT -eq 1 ]]; then
