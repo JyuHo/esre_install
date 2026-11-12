@@ -201,6 +201,33 @@ echo "Ou relancez post_install.sh pour réinstaller la dernière release."
 EOF
 chmod +x /usr/local/bin/esre-selfupdate
 
+# ---------- Paquets supplémentaires ----------
+if [[ "$OS" == "arch" ]]; then
+    # steam (x86_64 uniquement)
+    if [[ "$ARCH_NORM" == "x86_64" ]]; then
+        pacman -S --needed --noconfirm steam 2>/dev/null || true
+    fi
+    pacman -S --needed --noconfirm v4l-utils 2>/dev/null || true
+
+    if [[ "$BC250" -eq 1 ]]; then
+        pacman -S --needed --noconfirm proton-cachyos-slr-bc250 bc250-dual-audio bc250-cec bc250-fixes 2>/dev/null || true
+
+        # bc250-control-center (dernière release GitHub)
+        CC_URL="$(curl -s "https://api.github.com/repos/movacx/bc250-control-center/releases/latest" | jq -r '.assets[] | select(.name | test("pkg\\\\.tar\\\\.zst$")) | .browser_download_url' | head -n1)"
+        if [[ -n "$CC_URL" && "$CC_URL" != "null" ]]; then
+            CC_FILE="${TMPDIR}/$(basename "$CC_URL")"
+            if curl -fL -o "$CC_FILE" "$CC_URL" 2>/dev/null; then
+                pacman -U --noconfirm "$CC_FILE" 2>/dev/null || true
+            fi
+        fi
+    fi
+elif [[ "$OS" == "debian" ]]; then
+    if [[ "$ARCH_NORM" == "x86_64" ]]; then
+        apt-get install -y steam 2>/dev/null || true
+    fi
+    apt-get install -y v4l-utils 2>/dev/null || true
+fi
+
 # ---------- Service systemd (optionnel, désactivé par défaut) ----------
 cat > /etc/systemd/system/emulationstation.service <<'EOF'
 [Unit]
