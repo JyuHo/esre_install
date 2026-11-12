@@ -6,7 +6,7 @@ Scripts d'installation pour **EmulationStation-RE** sur Arch Linux (x86_64) et A
 
 - `pre_install.sh` — prépare l'installation d'Arch Linux à l'image d'Archinstall :
   partitionnement GPT, formatage btrfs avec subvolumes, pacstrap minimal,
-  création de l'utilisateur et des mots de passe, bootloader systemd-boot,
+  création de l'utilisateur et des mots de passe, bootloader Limine,
   snapper + snapshot initial, installation uniquement des pilotes/firmware détectés.
   Si une **AMD BC-250** est détectée, le dépôt `bc250-cachyos` est ajouté et le
   kernel `linux-cachyos-bc250` est installé à la place du kernel standard.
