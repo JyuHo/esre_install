@@ -114,6 +114,7 @@ SNAPPER_OPT="${SNAPPER_OPT:-1}"
 AUTOLOGIN_OPT="${AUTOLOGIN_OPT:-1}"
 PIPEWIRE_OPT="${PIPEWIRE_OPT:-1}"
 XORG_OPT="${XORG_OPT:-1}"
+GAMESCOPE_OPT="${GAMESCOPE_OPT:-1}"
 NETWORK_OPT="${NETWORK_OPT:-1}"
 REFLECTOR_OPT="${REFLECTOR_OPT:-0}"
 FONTS_OPT="${FONTS_OPT:-0}"
@@ -132,6 +133,7 @@ build_pkg_list() {
     [[ $NETWORK_OPT -eq 1 ]] && pkgs+=(networkmanager)
     if [[ $PIPEWIRE_OPT -eq 1 ]]; then pkgs+=(pipewire wireplumber pipewire-alsa pipewire-pulse alsa-utils); fi
     if [[ $XORG_OPT -eq 1 ]]; then pkgs+=(xorg-server xorg-xinit); fi
+    [[ $GAMESCOPE_OPT -eq 1 ]] && pkgs+=(gamescope)
     pkgs+=(git curl wget unzip limine efibootmgr)
     [[ $REFLECTOR_OPT -eq 1 ]] && pkgs+=(reflector)
     [[ $FONTS_OPT -eq 1 ]] && pkgs+=(noto-fonts-cjk)
@@ -235,6 +237,7 @@ if [[ $USE_DIALOG -eq 1 ]]; then
                     AUTOLOGIN "Autologin tty1 + startx" "$([[ $AUTOLOGIN_OPT -eq 1 ]] && echo on || echo off)" \
                     PIPEWIRE "Pipewire (audio)" "$([[ $PIPEWIRE_OPT -eq 1 ]] && echo on || echo off)" \
                     XORG "Serveur Xorg" "$([[ $XORG_OPT -eq 1 ]] && echo on || echo off)" \
+                    GAMESCOPE "Gamescope (compositeur gaming)" "$([[ $GAMESCOPE_OPT -eq 1 ]] && echo on || echo off)" \
                     NETWORK "NetworkManager" "$([[ $NETWORK_OPT -eq 1 ]] && echo on || echo off)" \
                     REFLECTOR "Reflector (miroirs)" "$([[ $REFLECTOR_OPT -eq 1 ]] && echo on || echo off)" \
                     FONTS "Noto fonts CJK" "$([[ $FONTS_OPT -eq 1 ]] && echo on || echo off)" \
@@ -243,6 +246,7 @@ if [[ $USE_DIALOG -eq 1 ]]; then
                 echo "$OPTS" | grep -q AUTOLOGIN && AUTOLOGIN_OPT=1 || AUTOLOGIN_OPT=0
                 echo "$OPTS" | grep -q PIPEWIRE && PIPEWIRE_OPT=1 || PIPEWIRE_OPT=0
                 echo "$OPTS" | grep -q XORG && XORG_OPT=1 || XORG_OPT=0
+                echo "$OPTS" | grep -q GAMESCOPE && GAMESCOPE_OPT=1 || GAMESCOPE_OPT=0
                 echo "$OPTS" | grep -q NETWORK && NETWORK_OPT=1 || NETWORK_OPT=0
                 echo "$OPTS" | grep -q REFLECTOR && REFLECTOR_OPT=1 || REFLECTOR_OPT=0
                 echo "$OPTS" | grep -q FONTS && FONTS_OPT=1 || FONTS_OPT=0
@@ -375,6 +379,7 @@ fi
 if [[ $XORG_OPT -eq 1 ]]; then
     PAC_PKGS+=(xorg-server xorg-xinit)
 fi
+[[ $GAMESCOPE_OPT -eq 1 ]] && PAC_PKGS+=(gamescope)
 PAC_PKGS+=(git curl wget unzip limine efibootmgr)
 [[ $REFLECTOR_OPT -eq 1 ]] && PAC_PKGS+=(reflector)
 [[ $FONTS_OPT -eq 1 ]] && PAC_PKGS+=(noto-fonts-cjk)
