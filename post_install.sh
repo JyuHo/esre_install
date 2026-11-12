@@ -146,7 +146,7 @@ if [[ -n "$TARGET_USER" ]]; then
     # xinitrc
     if [[ -f "$USER_HOME/.xinitrc" ]] || [[ ! -f "$USER_HOME/.xinitrc" ]]; then
         cat > "$USER_HOME/.xinitrc" <<'EOF'
-exec /usr/local/bin/start-es.sh
+exec /usr/local/bin/esre-session
 EOF
         chown "$TARGET_USER:$TARGET_USER" "$USER_HOME/.xinitrc"
     fi
@@ -159,7 +159,6 @@ cat > /usr/local/bin/start-es.sh <<'EOF'
 # Lance EmulationStation-RE avec un environnement propre.
 set -euo pipefail
 export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-}"
-# XDG par défaut
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
@@ -167,6 +166,31 @@ export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 exec /usr/bin/emulationstation "$@"
 EOF
 chmod +x /usr/local/bin/start-es.sh
+
+# Session ES-RE avec gamescope (sans DE)
+cat > /usr/local/bin/esre-session <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+if command -v gamescope >/dev/null 2>&1; then
+    exec gamescope -e -- /usr/bin/emulationstation "$@"
+else
+    exec /usr/bin/emulationstation "$@"
+fi
+EOF
+chmod +x /usr/local/bin/esre-session
+
+mkdir -p /usr/share/xsessions
+cat > /usr/share/xsessions/esre-session.desktop <<'EOF'
+[Desktop Entry]
+Name=ES-RE Session
+Comment=EmulationStation-RE running under Gamescope
+Exec=/usr/local/bin/esre-session
+Type=Application
+EOF
 
 # wrapper de mise à jour manuelle (optionnel)
 cat > /usr/local/bin/esre-selfupdate <<'EOF'
