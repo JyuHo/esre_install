@@ -47,8 +47,7 @@ prompt() {
     local label="$1" default="${2:-}"
     local val
     if [[ $USE_DIALOG -eq 1 ]]; then
-        dialog --inputbox "$label" 8 60 "$default" 2>"$TMPDIR/out" || true
-        val="$(cat "$TMPDIR/out" 2>/dev/null || true)"
+        val="$(dialog --stdout --inputbox "$label" 8 60 "$default" 2>/dev/null)" || true
     else
         read -rp "$label [$default] : " val
         val="${val:-$default}"
@@ -60,8 +59,7 @@ prompt_password() {
     local label="$1"
     local val
     if [[ $USE_DIALOG -eq 1 ]]; then
-        dialog --passwordbox "$label" 8 60 2>"$TMPDIR/out" || true
-        val="$(cat "$TMPDIR/out" 2>/dev/null || true)"
+        val="$(dialog --stdout --passwordbox "$label" 8 60 2>/dev/null)" || true
     else
         read -rsp "$label : " val; echo >&2
     fi
@@ -70,7 +68,7 @@ prompt_password() {
 
 msg() {
     if [[ $USE_DIALOG -eq 1 ]]; then
-        dialog --msgbox "$1" 14 72
+        dialog --msgbox "$1" 14 72 2>/dev/null || true
     else
         echo "$1"
     fi
@@ -128,7 +126,7 @@ fi
 # ---------- Menu principal ----------
 if [[ $USE_DIALOG -eq 1 ]]; then
     while true; do
-        dialog --menu "Menu principal" 22 74 12 \
+        CHOICE="$(dialog --stdout --menu "Menu principal" 22 74 12 \
             DISK "Disque cible : ${DISK:-<non défini>}" \
             OPTIONS "Options d'installation" \
             USER "Utilisateur / mots de passe" \
@@ -137,20 +135,18 @@ if [[ $USE_DIALOG -eq 1 ]]; then
             STATUS "Récapitulatif" \
             INSTALL "Lancer l'installation" \
             QUIT "Quitter" \
-            2>"$TMPDIR/menu" || true
-        CHOICE="$(cat "$TMPDIR/menu" 2>/dev/null || true)"
+            2>/dev/null)" || true
         case "$CHOICE" in
             DISK)
                 disk_opts=()
                 while read -r name size model; do
                     disk_opts+=("/dev/$name" "$size $model")
                 done < <(lsblk -d -n -o NAME,SIZE,MODEL | grep -v '^loop')
-                dialog --menu "Choisir le disque cible" 18 70 10 "${disk_opts[@]}" 2>"$TMPDIR/disk" || true
-                d="$(cat "$TMPDIR/disk" 2>/dev/null || true)"
+                d="$(dialog --stdout --menu "Choisir le disque cible" 18 70 10 "${disk_opts[@]}" 2>/dev/null)" || true
                 [[ -n "$d" ]] && DISK="$d"
                 ;;
             OPTIONS)
-                dialog --checklist "Options à installer" 18 70 8 \
+                OPTS="$(dialog --stdout --checklist "Options à installer" 18 70 8 \
                     SNAPPER "Snapper + snapshots (btrfs)" "$([[ $SNAPPER_OPT -eq 1 ]] && echo on || echo off)" \
                     AUTOLOGIN "Autologin tty1 + startx" "$([[ $AUTOLOGIN_OPT -eq 1 ]] && echo on || echo off)" \
                     PIPEWIRE "Pipewire (audio)" "$([[ $PIPEWIRE_OPT -eq 1 ]] && echo on || echo off)" \
@@ -158,8 +154,7 @@ if [[ $USE_DIALOG -eq 1 ]]; then
                     NETWORK "NetworkManager" "$([[ $NETWORK_OPT -eq 1 ]] && echo on || echo off)" \
                     REFLECTOR "Reflector (miroirs)" "$([[ $REFLECTOR_OPT -eq 1 ]] && echo on || echo off)" \
                     FONTS "Noto fonts CJK" "$([[ $FONTS_OPT -eq 1 ]] && echo on || echo off)" \
-                    2>"$TMPDIR/opts" || true
-                OPTS="$(cat "$TMPDIR/opts" 2>/dev/null || true)"
+                    2>/dev/null)" || true
                 echo "$OPTS" | grep -q SNAPPER && SNAPPER_OPT=1 || SNAPPER_OPT=0
                 echo "$OPTS" | grep -q AUTOLOGIN && AUTOLOGIN_OPT=1 || AUTOLOGIN_OPT=0
                 echo "$OPTS" | grep -q PIPEWIRE && PIPEWIRE_OPT=1 || PIPEWIRE_OPT=0
@@ -224,7 +219,7 @@ Utilisateur : $USERNAME
 BC-250 : $BC250
 Options : snapper=$SNAPPER_OPT autologin=$AUTOLOGIN_OPT pipewire=$PIPEWIRE_OPT xorg=$XORG_OPT network=$NETWORK_OPT reflector=$REFLECTOR_OPT fonts=$FONTS_OPT"
 if [[ $USE_DIALOG -eq 1 ]]; then
-    dialog --yesno "Confirmer l'installation ?\n\n$SUMMARY" 18 60 || die "Annulé par l'utilisateur."
+    dialog --yesno "Confirmer l'installation ?\n\n$SUMMARY" 18 60 2>/dev/null || die "Annulé par l'utilisateur."
 else
     echo "$SUMMARY"
     read -rp "Confirmer ? (oui/non) : " c
