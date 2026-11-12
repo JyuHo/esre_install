@@ -158,7 +158,6 @@ if [[ $USE_DIALOG -eq 1 ]]; then
     echo "$OPTS" | grep -q REFLECTOR || REFLECTOR_OPT=0
 else
     # mode texte : questions simples
-    read -rp "Taille swap en Go (0 = désactivé) [${SWAP_SIZE}] : " v; SWAP_SIZE="${v:-$SWAP_SIZE}"
     read -rp "Activer snapper ? (o/n) [o] : " v; [[ "${v:-o}" == "o" ]] || SNAPPER_OPT=0
     read -rp "Autologin ? (o/n) [o] : " v; [[ "${v:-o}" == "o" ]] || AUTOLOGIN_OPT=0
 fi
@@ -172,7 +171,7 @@ if [[ -z "${USER_PASSWORD:-}" ]]; then USER_PASSWORD="$(prompt_password "Mot de 
 if [[ -z "${ROOT_PASSWORD:-}" ]]; then ROOT_PASSWORD="$(prompt_password "Mot de passe root")"; fi
 
 if [[ $SWAP_SIZE -gt 0 ]]; then
-    v="$(prompt "Taille swap en Go" "$SWAP_SIZE")"
+    v="$(prompt "Taille du swap en Go (0 = désactivé)" "$SWAP_SIZE")"
     SWAP_SIZE="${v:-$SWAP_SIZE}"
 fi
 
