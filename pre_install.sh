@@ -134,8 +134,9 @@ fi
 HOSTNAME="${HOSTNAME:-esre}"
 TIMEZONE="${TIMEZONE:-Europe/Paris}"
 LANG="${LANG:-fr_FR.UTF-8}"
+KEYMAP="${KEYMAP:-fr}"
 USERNAME="${USERNAME:-gamer}"
-SNAPPER_OPT=1; AUTOLOGIN_OPT=1; PIPEWIRE_OPT=1; XORG_OPT=1; NETWORK_OPT=1; REFLECTOR_OPT=0
+SNAPPER_OPT=1; AUTOLOGIN_OPT=1; PIPEWIRE_OPT=1; XORG_OPT=1; NETWORK_OPT=1; REFLECTOR_OPT=0; FONTS_OPT=0
 
 if [[ $USE_DIALOG -eq 1 ]]; then
     dialog --checklist "Options à installer" 18 70 8 \
@@ -146,6 +147,7 @@ if [[ $USE_DIALOG -eq 1 ]]; then
         XORG "Serveur Xorg" on \
         NETWORK "NetworkManager" on \
         REFLECTOR "Reflector (miroirs)" off \
+        FONTS "Noto fonts CJK" off \
         2>"$TMPDIR/opts" || true
     OPTS="$(cat "$TMPDIR/opts" 2>/dev/null || true)"
     # swap toggle
@@ -156,6 +158,7 @@ if [[ $USE_DIALOG -eq 1 ]]; then
     echo "$OPTS" | grep -q XORG || XORG_OPT=0
     echo "$OPTS" | grep -q NETWORK || NETWORK_OPT=0
     echo "$OPTS" | grep -q REFLECTOR || REFLECTOR_OPT=0
+    echo "$OPTS" | grep -q FONTS || FONTS_OPT=0
 else
     # mode texte : questions simples
     read -rp "Activer snapper ? (o/n) [o] : " v; [[ "${v:-o}" == "o" ]] || SNAPPER_OPT=0
@@ -166,6 +169,7 @@ fi
 HOSTNAME="$(prompt "Hostname" "$HOSTNAME")"
 TIMEZONE="$(prompt "Timezone (ex: Europe/Paris)" "$TIMEZONE")"
 LANG="$(prompt "Locale (ex: fr_FR.UTF-8)" "$LANG")"
+KEYMAP="$(prompt "Keymap console (ex: fr, us)" "$KEYMAP")"
 USERNAME="$(prompt "Nom d'utilisateur" "$USERNAME")"
 if [[ -z "${USER_PASSWORD:-}" ]]; then USER_PASSWORD="$(prompt_password "Mot de passe utilisateur ($USERNAME)")"; fi
 if [[ -z "${ROOT_PASSWORD:-}" ]]; then ROOT_PASSWORD="$(prompt_password "Mot de passe root")"; fi
@@ -237,7 +241,7 @@ mount "$EFI_PART" /mnt/boot
 
 # ---------- Pacstrap ----------
 log "Installation du système de base (pacstrap)"
-PAC_PKGS=(base base-devel btrfs-progs sudo)
+PAC_PKGS=(base base-devel btrfs-progs sudo polkit)
 [[ $SNAPPER_OPT -eq 1 ]] && PAC_PKGS+=(snapper snap-pac)
 [[ $NETWORK_OPT -eq 1 ]] && PAC_PKGS+=(networkmanager)
 if [[ $PIPEWIRE_OPT -eq 1 ]]; then
@@ -249,6 +253,7 @@ fi
 PAC_PKGS+=(git curl wget unzip limine efibootmgr)
 
 [[ $REFLECTOR_OPT -eq 1 ]] && PAC_PKGS+=(reflector)
+[[ $FONTS_OPT -eq 1 ]] && PAC_PKGS+=(noto-fonts-cjk)
 
 case "$CPU_VENDOR" in
     amd) PAC_PKGS+=(amd-ucode) ;;
@@ -280,6 +285,7 @@ cat > /mnt/tmp/install.env <<EOF
 export HOSTNAME=$(printf '%q' "$HOSTNAME")
 export TIMEZONE=$(printf '%q' "$TIMEZONE")
 export LANG=$(printf '%q' "$LANG")
+export KEYMAP=$(printf '%q' "$KEYMAP")
 export USERNAME=$(printf '%q' "$USERNAME")
 export USER_PASSWORD=$(printf '%q' "$USER_PASSWORD")
 export ROOT_PASSWORD=$(printf '%q' "$ROOT_PASSWORD")
@@ -306,6 +312,7 @@ hwclock --systohc
 grep -q "^${LANG}" /etc/locale.gen || echo "${LANG} UTF-8" >> /etc/locale.gen
 locale-gen
 echo "LANG=${LANG}" > /etc/locale.conf
+echo "KEYMAP=${KEYMAP}" > /etc/vconsole.conf
 
 echo "${HOSTNAME}" > /etc/hostname
 cat > /etc/hosts <<EOF
@@ -350,6 +357,7 @@ if [[ "${SNAPPER_OPT}" == "1" ]]; then
 fi
 
 [[ "${NETWORK_OPT}" == "1" ]] && systemctl enable NetworkManager
+systemctl enable systemd-timesyncd 2>/dev/null || true
 
 ROOT_UUID="$(blkid -s UUID -o value "${ROOT_PART}")"
 if [[ "${BC250}" == "1" ]]; then
