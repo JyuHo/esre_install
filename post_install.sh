@@ -139,6 +139,23 @@ if [[ -n "$TARGET_USER" ]]; then
              "$USER_HOME/.local/share/emulationstation" \
              "$USER_HOME/.cache/emulationstation" \
              "$USER_HOME/.local/state/emulationstation"
+    # bashrc coloré
+    cat > "$USER_HOME/.bashrc" <<'BASHRC'
+# Couleurs et alias
+alias ls="ls --color=auto"
+alias ll="ls -la --color=auto"
+alias grep="grep --color=auto"
+alias ip="ip -color=auto"
+if command -v eza >/dev/null 2>&1; then
+    alias ls="eza --color=auto --icons"
+    alias ll="eza -la --color=auto --icons"
+fi
+if command -v bat >/dev/null 2>&1; then
+    alias cat="bat --paging=never"
+fi
+PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+BASHRC
+    chown "$TARGET_USER:$TARGET_USER" "$USER_HOME/.bashrc"
     chown -R "$TARGET_USER:$TARGET_USER" "$USER_HOME/.config/emulationstation" \
         "$USER_HOME/.local/share/emulationstation" "$USER_HOME/.cache/emulationstation" \
         "$USER_HOME/.local/state/emulationstation" 2>/dev/null || true

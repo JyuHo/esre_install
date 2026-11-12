@@ -128,7 +128,7 @@ fi
 
 # ---------- Fonction : liste des paquets ----------
 build_pkg_list() {
-    local pkgs=(base base-devel btrfs-progs sudo polkit xterm)
+    local pkgs=(base base-devel btrfs-progs sudo polkit kitty bat eza)
     [[ $SNAPPER_OPT -eq 1 ]] && pkgs+=(snapper snap-pac)
     [[ $NETWORK_OPT -eq 1 ]] && pkgs+=(networkmanager)
     if [[ $PIPEWIRE_OPT -eq 1 ]]; then pkgs+=(pipewire wireplumber pipewire-alsa pipewire-pulse alsa-utils); fi
@@ -370,7 +370,7 @@ fi
 
 # ---------- Pacstrap ----------
 log "Installation du système de base (pacstrap)"
-PAC_PKGS=(base base-devel btrfs-progs sudo polkit xterm)
+PAC_PKGS=(base base-devel btrfs-progs sudo polkit kitty bat eza)
 [[ $SNAPPER_OPT -eq 1 ]] && PAC_PKGS+=(snapper snap-pac)
 [[ $NETWORK_OPT -eq 1 ]] && PAC_PKGS+=(networkmanager)
 if [[ $PIPEWIRE_OPT -eq 1 ]]; then
@@ -474,6 +474,28 @@ echo "${USERNAME}:${USER_PASSWORD}" | chpasswd
 
 if ! grep -q '^%wheel' /etc/sudoers; then
     echo '%wheel ALL=(ALL:ALL) ALL' >> /etc/sudoers
+fi
+
+# ---------- bashrc coloré ----------
+BASHRC='# Couleurs et alias
+alias ls="ls --color=auto"
+alias ll="ls -la --color=auto"
+alias grep="grep --color=auto"
+alias ip="ip -color=auto"
+if command -v eza >/dev/null 2>&1; then
+    alias ls="eza --color=auto --icons"
+    alias ll="eza -la --color=auto --icons"
+fi
+if command -v bat >/dev/null 2>&1; then
+    alias cat="bat --paging=never"
+fi
+PS1='"'"'\\[\\033[01;32m\\]\\u@\\h\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ '"'"'
+'
+printf '%s\n' "$BASHRC" > /etc/skel/.bashrc
+cp /etc/skel/.bashrc /root/.bashrc 2>/dev/null || true
+if [[ -d "/home/${USERNAME}" ]]; then
+    cp /etc/skel/.bashrc "/home/${USERNAME}/.bashrc"
+    chown "${USERNAME}:${USERNAME}" "/home/${USERNAME}/.bashrc"
 fi
 
 if [[ "${ROOT_FS}" == "btrfs" && "${SNAPPER_OPT}" == "1" ]]; then
