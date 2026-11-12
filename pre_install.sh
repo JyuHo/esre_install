@@ -9,7 +9,7 @@
 #   - bootloader Limine
 #   - snapper + snapshot initial
 #   - installation uniquement des pilotes/firmware nécessaires (détection matérielle)
-#   - si AMD BC-250 détectée : dépôt bc250-cachyos + kernel linux-cachyos-bc250
+#   - si AMD BC-250 détectée : dépôt bc250-cachyos + kernel linux-cachyos-bore-bc250
 #
 # Variables d'environnement optionnelles :
 #   DISK=/dev/nvme0n1   TARGET_DISK (sinon sélection interactive)
@@ -232,11 +232,11 @@ Server = https://github.com/MastaG/linux-cachyos-bc250/releases/download/repo
 EOF
     fi
     pacman -Sy --noconfirm
-    pacman -S --needed --noconfirm linux-cachyos-bc250 linux-cachyos-bc250-headers
+    pacman -S --needed --noconfirm linux-cachyos-bore-bc250 linux-cachyos-bore-bc250-headers
     # mesa patché depuis le dépôt
     pacman -S --needed --noconfirm mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon
     echo nct6687 > /etc/modules-load.d/nct6687.conf
-    KERNEL_PKG="linux-cachyos-bc250"
+    KERNEL_PKG="linux-cachyos-bore-bc250"
 else
     KERNEL_PKG="linux"
 fi
@@ -260,8 +260,8 @@ fi
 # bootloader Limine
 ROOT_UUID="$(blkid -s UUID -o value "${ROOT_PART}")"
 if [[ "${BC250}" == "1" ]]; then
-    VMLINUZ="/vmlinuz-linux-cachyos-bc250"
-    INITRD="/initramfs-linux-cachyos-bc250.img"
+    VMLINUZ="/vmlinuz-linux-cachyos-bore-bc250"
+    INITRD="/initramfs-linux-cachyos-bore-bc250.img"
 else
     VMLINUZ="/vmlinuz-linux"
     INITRD="/initramfs-linux.img"
