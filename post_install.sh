@@ -20,6 +20,11 @@ die()  { echo -e "${RED}[x]${NC} $*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "Ce script doit être exécuté en root."
 
+# Sur une fresh install on est root directement : vérification des outils de base.
+for cmd in curl; do
+    command -v "$cmd" >/dev/null 2>&1 || die "Outil manquant : $cmd"
+done
+
 REPO="JyuHo/emulationstation-re"
 API="https://api.github.com/repos/${REPO}/releases/latest"
 

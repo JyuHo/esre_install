@@ -17,6 +17,19 @@ die()  { echo -e "${RED}[x]${NC} $*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "Ce script doit être exécuté en root (depuis l'ISO Arch)."
 
+# ---------- Pré-vérifications ----------
+# Sur une fresh install on est root directement : on vérifie les outils requis.
+for cmd in sgdisk pacstrap arch-chroot genfstab mkfs.btrfs mkfs.fat mkswap lsblk blkid; do
+    command -v "$cmd" >/dev/null 2>&1 || die "Outil manquant : $cmd (ISO Arch requise)."
+done
+command -v pacman >/dev/null 2>&1 || die "pacman introuvable : lancez depuis l'ISO Arch."
+[[ -d /mnt ]] || die "/mnt introuvable."
+if mountpoint -q /mnt 2>/dev/null; then
+    warn "/mnt est déjà monté. Démontez avant de continuer."
+    read -rp "Continuer quand même ? (oui/non) : " _c
+    [[ "${_c:-non}" == "oui" ]] || die "Annulé."
+fi
+
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
