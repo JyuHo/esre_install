@@ -127,7 +127,10 @@ fi
 
 # ---------- Options (cases à cocher) ----------
 # valeurs par défaut
-SWAP_SIZE="${SWAP_SIZE:-4}"
+# swap par défaut : 16 Go pour BC-250, 4 Go sinon
+if [[ -z "${SWAP_SIZE:-}" ]]; then
+    if [[ "${BC250:-0}" == "1" ]]; then SWAP_SIZE=16; else SWAP_SIZE=4; fi
+fi
 HOSTNAME="${HOSTNAME:-esre}"
 TIMEZONE="${TIMEZONE:-Europe/Paris}"
 LANG="${LANG:-fr_FR.UTF-8}"
@@ -372,7 +375,12 @@ if [[ -f /boot/intel-ucode.img ]]; then UCODE_INITRD="/intel-ucode.img"; fi
         echo "    initrd_path: boot():${UCODE_INITRD}"
     fi
     echo "    initrd_path: boot():${INITRD}"
-    echo "    cmdline: root=UUID=${ROOT_UUID} rw rootflags=subvol=@ compress=zstd"
+    if [[ "${BC250}" == "1" ]]; then
+        CMDLINE="root=UUID=${ROOT_UUID} rw rootflags=subvol=@ compress=zstd zswap.enabled=1 zswap.compressor=zstd zswap.zpool=zsmalloc"
+    else
+        CMDLINE="root=UUID=${ROOT_UUID} rw rootflags=subvol=@ compress=zstd"
+    fi
+    echo "    cmdline: ${CMDLINE}"
 } > /boot/limine.conf
 
 mkinitcpio -P
