@@ -6,7 +6,7 @@
 #   - formatage btrfs avec subvolumes (@, @home, @snapshots, @var_log)
 #   - pacstrap d'un système minimal
 #   - configuration (locale, timezone, hostname, users, mots de passe)
-#   - bootloader systemd-boot
+#   - bootloader Limine
 #   - snapper + snapshot initial
 #   - installation uniquement des pilotes/firmware nécessaires (détection matérielle)
 #   - si AMD BC-250 détectée : dépôt bc250-cachyos + kernel linux-cachyos-bc250
@@ -148,7 +148,7 @@ log "Installation du système de base (pacstrap)"
 PAC_PKGS=(base base-devel btrfs-progs snapper snap-pac sudo networkmanager
            pipewire wireplumber pipewire-alsa pipewire-pulse alsa-utils
            xorg-server xorg-xinit git curl wget unzip
-           reflector)
+           reflector limine efibootmgr)
 
 # microcode
 case "$CPU_VENDOR" in
@@ -198,6 +198,7 @@ export GPU_TYPES=$(printf '%q' "$GPU_TYPES")
 export BC250=$BC250
 export EFI_PART=$(printf '%q' "$EFI_PART")
 export ROOT_PART=$(printf '%q' "$ROOT_PART")
+export DISK=$(printf '%q' "$DISK")
 EOF
 
 # chroot script
@@ -256,8 +257,7 @@ fi
 
 # hostname déjà fait
 
-# bootloader systemd-boot
-bootctl install
+# bootloader Limine
 ROOT_UUID="$(blkid -s UUID -o value "${ROOT_PART}")"
 if [[ "${BC250}" == "1" ]]; then
     VMLINUZ="/vmlinuz-linux-cachyos-bc250"
@@ -272,23 +272,43 @@ UCODE_INITRD=""
 if [[ -f /boot/amd-ucode.img ]]; then UCODE_INITRD="/amd-ucode.img"; fi
 if [[ -f /boot/intel-ucode.img ]]; then UCODE_INITRD="/intel-ucode.img"; fi
 
-mkdir -p /boot/loader/entries
-cat > /boot/loader/loader.conf <<EOF
-default arch
-timeout 3
-console-mode max
-editor no
-EOF
-
+# configuration Limine (/boot/limine.conf, à la racine de l'ESP)
 {
-  echo "title   Arch Linux"
-  echo "linux   ${VMLINUZ}"
-  [[ -n "$UCODE_INITRD" ]] && echo "initrd  ${UCODE_INITRD}"
-  echo "initrd  ${INITRD}"
-  echo "options root=UUID=${ROOT_UUID} rw rootflags=subvol=@ compress=zstd"
-} > /boot/loader/entries/arch.conf
+    echo "timeout: 3"
+    echo
+    echo "/Arch Linux"
+    echo "    protocol: linux"
+    echo "    kernel_path: boot():${VMLINUZ}"
+    if [[ -n "$UCODE_INITRD" ]]; then
+        echo "    initrd_path: boot():${UCODE_INITRD}"
+    fi
+    echo "    initrd_path: boot():${INITRD}"
+    echo "    cmdline: root=UUID=${ROOT_UUID} rw rootflags=subvol=@ compress=zstd"
+} > /boot/limine.conf
 
 mkinitcpio -P
+
+# installation de l'EFI Limine
+if [[ -d /sys/firmware/efi ]]; then
+    mkdir -p /boot/EFI/limine
+    install -Dm644 /usr/share/limine/BOOTX64.EFI /boot/EFI/limine/BOOTX64.EFI
+    # nettoyage des anciennes entrées Limine
+    efibootmgr 2>/dev/null | grep -i limine | sed -E 's/^Boot([0-9A-Fa-f]+).*/\1/' | while read -r _id; do
+        efibootmgr -b "$_id" -B >/dev/null 2>&1 || true
+    done
+    efibootmgr --create --disk "${DISK}" --part 1 --label "Limine" \
+        --loader '\EFI\limine\BOOTX64.EFI' --unicode >/dev/null 2>&1 || true
+else
+    # mode BIOS/MBR
+    if [[ -f /usr/share/limine/limine-bios.sys ]]; then
+        cp -f /usr/share/limine/limine-bios.sys /boot/limine-bios.sys
+    fi
+    if command -v limine-install >/dev/null 2>&1; then
+        limine-install "${DISK}" >/dev/null 2>&1 || true
+    elif [[ -x /usr/bin/limine-install ]]; then
+        /usr/bin/limine-install "${DISK}" >/dev/null 2>&1 || true
+    fi
+fi
 
 # snapper
 if ! snapper list-configs 2>/dev/null | grep -q '^root'; then
